@@ -1,0 +1,45 @@
+/** Tutorial example: Nematic droplet on a substrate 
+    for DSOFT Workshop March 2023 
+    Uses Morpho 0.5.6 
+    by T. J. Atherton and the softmattertheory group at Tufts University */
+
+import meshgen 
+import plot 
+
+var sigma = 20      // Isotropic surface tension fluid-air
+var deltasigma = -4 // Difference between surface tension of air-substrate interface and fluid-substrate interface
+
+/* Part 1: Create and visualize the Mesh */
+var c = CircularDomain([0,0], 1)                            // The unit disk 
+var hs = HalfSpaceDomain(Matrix([0,0]), Matrix([0,1]))      // Half space below the origin
+var dom = c.difference(hs)                                  // Take the difference
+var mg = MeshGen(dom, [-1..1:0.2, -1..1:0.2], quiet=true)   // Mesh this domain
+var mesh = mg.build()                                       // Build the Mesh 
+
+var old = plotmesh(mesh, grade=[0,1], color=Blue)
+
+/* Part 2: Create and visualize Selections */
+var bnd = Selection(mesh, boundary=true)                    // Select boundary of the mesh 
+var upper = Selection(mesh, fn (x,y) x^2+y^2>0.99)          // Select the outer boundary of the disk 
+upper.addgrade(1)                                           // Add lines (grade 1) elements to the upper selection
+var lower = Selection(mesh, fn (x,y) y<0.01)                // Select the lower boundary of the mesh 
+lower.addgrade(1)                                           // Add lines (grade 1) elements to the lower selection
+
+/* Part 3: Formulate and solve the isotropic problem */
+var problem=OptimizationProblem(mesh)                       // Create an OptimizationProblem with our mesh as the target
+
+var llength = Length()                                      // Apply an Length functional to the upper and lower boundaries 
+problem.addenergy(llength, selection=upper, prefactor=sigma) 
+problem.addenergy(llength, selection=lower, prefactor=deltasigma)  
+
+var larea = Area()                                          // Add an Area functional as a global constraint
+problem.addconstraint(larea) 
+
+var lcons = ScalarPotential(fn (x,y) y)                     // Use a local level set constraint to pin
+problem.addlocalconstraint(lcons, selection=lower)          // the lower vertices to the substrate
+
+// Now to solve it 
+var opt = ShapeOptimizer(problem, mesh)                     // Create the ShapeOptimizer
+opt.conjugategradient(500)                                  // Perform conjugate gradient
+
+Show(plotmesh(mesh, grade=[0,1])+old)
